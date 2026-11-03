@@ -1,0 +1,66 @@
+# Secret scan on every pull request (COO-852).
+#
+# Required on all CoorpixAG repositories through the organization ruleset "Gitleaks on every PR",
+# so no repository needs a copy of this file. It scans only the commits the pull request adds,
+# so secrets already in a repository's history do not block anyone; those are handled by
+# rotation (COO-846..849 and the per-lead issues).
+#
+# Config: the repository's own .gitleaks.toml if it has one, otherwise gitleaks/gitleaks.toml
+# from CoorpixAG/.github. A .gitleaksignore in the repository is honoured as well.
+#
+# gitleaks/gitleaks-action is not used: it needs a paid licence key for organizations. The
+# binary is downloaded from the release and checked against a pinned SHA-256 instead.
+
+name: gitleaks
+
+on:
+  pull_request:
+  merge_group:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GITLEAKS_VERSION: 8.30.1
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Shared config
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: CoorpixAG/.github
+          ref: main
+          path: .coorpix-gitleaks
+          sparse-checkout: gitleaks
+          persist-credentials: false
+
+      - name: Install gitleaks
+        run: |
+          curl -sSfL -o /tmp/gitleaks.tgz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  /tmp/gitleaks.tgz" | sha256sum -c -
+          tar -xzf /tmp/gitleaks.tgz -C /tmp gitleaks
+
+      - name: Scan the commits this pull request adds
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
+        run: |
+          config=.coorpix-gitleaks/gitleaks/gitleaks.toml
+          # In CoorpixAG/.github itself, test the config the pull request brings, not main's.
+          [ "$GITHUB_REPOSITORY" = "CoorpixAG/.github" ] && config=gitleaks/gitleaks.toml
+          [ -f .gitleaks.toml ] && config=.gitleaks.toml
+          echo "config: $config, commits: ${BASE:0:8}..${HEAD:0:8}"
+          /tmp/gitleaks git . \
+            --config "$config" \
+            --log-opts="--no-merges ${BASE}..${HEAD}" \
+            --redact --no-banner --verbose \
+            --exit-code 1
