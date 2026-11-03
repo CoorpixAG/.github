@@ -1,0 +1,42 @@
+# Coorpix gitleaks configuration (COO-852). Used by the shared workflow
+# .github/workflows/gitleaks.yml for every repository that has no .gitleaks.toml of its own.
+#
+# Start from gitleaks' built-in rules and only take known false positives out. Every allowlist
+# below says why it is safe. A repository that needs more can add its own .gitleaks.toml with
+# [extend] path pointing at a copy of this file, or a .gitleaksignore with finding fingerprints.
+
+title = "Coorpix"
+
+[extend]
+useDefault = true
+
+# SealedSecret manifests hold only ciphertext that the cluster's controller key can open.
+# Committing them is the intended way to keep secrets in git (cortex-ops).
+[[allowlists]]
+description = "SealedSecret manifests (ciphertext only)"
+paths = ['''(^|/)[^/]*-sealed\.ya?ml$''']
+
+# Microsoft's published Azurite storage emulator key. It is the same for everyone and opens
+# nothing outside a developer's own emulator.
+[[allowlists]]
+description = "Azurite emulator key (public)"
+regexes = ['''Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==''']
+
+# Only the catch-all "generic-api-key" rule is relaxed here. A real OpenAI, AWS, Azure, GitHub,
+# Stripe or private key in these files is still reported by its own rule.
+[[allowlists]]
+description = "Made-up values in tests (generic rule only)"
+targetRules = ["generic-api-key"]
+paths = [
+  '''(^|/)(tests?|__tests__|fixtures)/''',
+  '''\.(test|spec)\.[cm]?[jt]sx?$''',
+  '''(^|/)test_[^/]+\.py$''',
+]
+
+[[allowlists]]
+description = "Prose and examples in docs and example env files (generic rule only)"
+targetRules = ["generic-api-key"]
+paths = [
+  '''\.mdx?$''',
+  '''(^|/)\.env(\.[^/]+)?\.example$''',
+]
