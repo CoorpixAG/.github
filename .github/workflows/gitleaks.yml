@@ -22,9 +22,16 @@ permissions:
 
 jobs:
   scan:
-    runs-on: ubuntu-latest
+    # CoorpixAG/cortex and CoorpixAG/cortex-ops scan on their own ARC runners in the Cortex cluster
+    # (COO-1439): on 23.11.2026 GitHub stopped starting jobs on its runners (included minutes used
+    # up, no payment method), this check is required for their merges, and Cortex delivery stopped.
+    # The label is the runner scale set registered for that repository; a repository without one
+    # must stay on ubuntu-latest, or its pull requests wait for a runner that never comes.
+    runs-on: ${{ github.repository == 'CoorpixAG/cortex' && 'cortex' || github.repository == 'CoorpixAG/cortex-ops' && 'cortex-ops' || 'ubuntu-latest' }}
     timeout-minutes: 10
     env:
+      # ARC runner pods run as an arbitrary uid with no $HOME. Harmless on GitHub's runners.
+      HOME: /tmp
       GITLEAKS_VERSION: 8.30.1
       GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
     steps:
